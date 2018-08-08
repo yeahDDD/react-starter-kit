@@ -5,6 +5,12 @@ const MiniCssExtractPlugin = require("mini-css-extract-plugin")
 const CopyWebpackPlugin = require('copy-webpack-plugin')
 const project = require('./project.config.js')
 
+const HappyPack = require('happypack') // 多线程构建；优化构建速度
+const os = require('os')
+const happyThreadPool = HappyPack.ThreadPool({ size: os.cpus().length  });
+
+const UglifyJsPlugin = require('uglifyjs-webpack-plugin') // 优化代码压缩
+
 const envDevelopment = project.env === 'development'
 const envProduction = project.env === 'production'
 const devtool = project.sourceMap ? 'cheap-source-map' : false
@@ -16,13 +22,13 @@ const config = {
         main: [SRC_DIR]
     },
     output: {
-        path      : path.resolve(project.basePath, project.outDir),
-        filename  : envDevelopment ? 'js/[name].js' : "js/[name].[chunkhash:5].js",
+        path: path.resolve(project.basePath, project.outDir),
+        filename: envDevelopment ? 'js/[name].js' : "js/[name].[chunkhash:5].js",
         publicPath: project.publicPath
     },
-    mode    : project.env,
-    devtool : devtool,
-    resolve : {
+    mode: project.env,
+    devtool: devtool,
+    resolve: {
         modules: [
             project.srcDir,
             'node_modules',
@@ -32,21 +38,20 @@ const config = {
         },
         extensions: ['*', '.js', '.jsx', '.json', '.less', '.css']
     },
-    module : {
+    module: {
         rules: [
             {
                 test: /(\.jsx|\.js)$/,
-                use : {
-                    loader: 'babel-loader?cacheDirectory'
-                },
+                // 使用happypack
+                use: 'happypack/loader?id=js',
                 include: SRC_DIR,
                 exclude: /node_modules/
             },
             {
-                test    : /\.(png|jpe?g|gif|svg)(\?.*)?$/,
-                loader  : 'url-loader',
-                options : {
-                    limit     : 10000,
+                test: /\.(png|jpe?g|gif|svg)(\?.*)?$/,
+                loader: 'url-loader',
+                options: {
+                    limit: 10000,
                     outputPath: "images"
                 }
             }
@@ -55,21 +60,21 @@ const config = {
     optimization: {
         sideEffects: false,
         splitChunks: {
-            chunks     :'all',
-            minSize    : 30000,
-            minChunks  : 1,
+            chunks: 'all',
+            minSize: 30000,
+            minChunks: 1,
             cacheGroups: {
                 common: {
-                    name    : 'common',
-                    test    : /node_modules/,
-                    chunks  : 'initial',
+                    name: 'common',
+                    test: /node_modules/,
+                    chunks: 'initial',
                     priority: -10,
-                    enforce : true
+                    enforce: true
                 },
                 styles: {
-                    name   : 'styles',
-                    test   : /(\.less|\.css)$/,
-                    chunks : 'all',
+                    name: 'styles',
+                    test: /(\.less|\.css)$/,
+                    chunks: 'all',
                     enforce: true,
                 }
             }
@@ -80,14 +85,14 @@ const config = {
     },
     plugins: [
         new webpack.DllReferencePlugin({
-            context : project.basePath,
+            context: project.basePath,
             manifest: path.resolve(project.basePath, 'dll', 'manifest.json')
         }),
         new HtmlWebpackPlugin({
-            template : 'index.html',
-            inject   : true,
-            favicon  : path.resolve('favicon.ico'),
-            minify   : {
+            template: 'index.html',
+            inject: true,
+            favicon: path.resolve('favicon.ico'),
+            minify: {
                 collapseWhitespace: true,
             }
         }),
@@ -99,11 +104,11 @@ fontLoader.forEach((font) => {
     let extension = font[0]
     let mimetype = font[1]
     config.module.rules.push({
-        test    : new RegExp(`\\.${extension}$`),
-        loader  : 'url-loader',
-        options : {
-            name  : 'fonts/[name].[ext]',
-            limit : 10000,
+        test: new RegExp(`\\.${extension}$`),
+        loader: 'url-loader',
+        options: {
+            name: 'fonts/[name].[ext]',
+            limit: 10000,
             mimetype,
         },
     })
@@ -113,11 +118,11 @@ if (envDevelopment) {
     config.module.rules.push({
         test: /(\.less|\.css)$/,
         use: [{
-            loader : "style-loader"
+            loader: "style-loader"
         }, {
-            loader : "css-loader"
+            loader: "css-loader"
         }, {
-            loader : "less-loader",
+            loader: "less-loader",
             options: {
                 javascriptEnabled: true
             }
@@ -128,32 +133,38 @@ if (envDevelopment) {
     )
     config.plugins.push(
         new webpack.NoEmitOnErrorsPlugin(),
-        new webpack.HotModuleReplacementPlugin()
+        new webpack.HotModuleReplacementPlugin(),
+        new HappyPack({
+            id: 'js',
+            loaders: [
+                'babel-loader?cacheDirectory=true',
+            ]
+        }),
     )
 }
 
 if (envProduction) {
     config.module.rules.push({
         test: /(\.less|\.css)$/,
-        use :[
+        use: [
             MiniCssExtractPlugin.loader,
             {
-                loader : 'css-loader',
+                loader: 'css-loader',
                 options: {
-                    importLoaders  : 1,
+                    importLoaders: 1,
                     minimize: {
                         autoprefixer: {
-                            add     : true,
-                            remove  : true,
-                            browsers: ['last 2 versions'],
+                            add: true,
+                            remove: true,
+                            browsers: ['last 10 versions'],
                         },
-                        discardComments : {
-                            removeAll : true,
+                        discardComments: {
+                            removeAll: true,
                         },
                         discardUnused: false,
-                        mergeIdents  : false,
-                        reduceIdents : false,
-                        safe         : true
+                        mergeIdents: false,
+                        reduceIdents: false,
+                        safe: true
                     }
                 }
             },
@@ -167,13 +178,36 @@ if (envProduction) {
     })
     config.plugins.push(
         new MiniCssExtractPlugin({
-            filename     : "css/main.[chunkhash:5].css",
+            filename: "css/main.[chunkhash:5].css",
             chunkFilename: 'css/main.[contenthash:5].css'
         }),
         new CopyWebpackPlugin([{
-            from : path.join(project.basePath,'dll'),
-            to   : path.join(project.basePath,'dist','dll')
-        }])
+            from: path.join(project.basePath, 'dll'),
+            to: path.join(project.basePath, 'dist', 'dll')
+        }]),
+        new HappyPack({
+            id: 'js',
+            loaders: [
+                'babel-loader?cacheDirectory=true',
+            ],
+            threadPool: happyThreadPool,
+            verbose: true
+        }),
+        new UglifyJsPlugin({
+            cache: true,
+            parallel: true,
+            exclude: /node_modules/,
+            sourceMap: project.sourceMap ? true : false,
+            uglifyOptions: {
+                warnings: false,
+                output: {
+                  comments: false,
+                  beautify: false,
+                },
+                ie8: true,
+              }
+        }),
+
     )
 }
 
