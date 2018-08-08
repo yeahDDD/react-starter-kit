@@ -1,23 +1,18 @@
 const webpack = require('webpack')
 const path = require('path')
 const HtmlWebpackPlugin = require('html-webpack-plugin')
-const MiniCssExtractPlugin = require("mini-css-extract-plugin")
-const CopyWebpackPlugin = require('copy-webpack-plugin')
 const project = require('./project.config.js')
-
-const HappyPack = require('happypack') // 多线程构建；优化构建速度
-const os = require('os')
-const happyThreadPool = HappyPack.ThreadPool({ size: os.cpus().length  });
-
-const UglifyJsPlugin = require('uglifyjs-webpack-plugin') // 优化代码压缩
+const merge = require('webpack-merge')
+const dev = require('./webpack.dev.config')
+const prod = require('./webpack.prod.config')
 
 const envDevelopment = project.env === 'development'
 const envProduction = project.env === 'production'
-const devtool = project.sourceMap ? 'cheap-source-map' : false
 
+const devtool = project.sourceMap ? 'cheap-source-map' : false
 const SRC_DIR = path.join(project.basePath, project.srcDir)
 
-const config = {
+let config = {
     entry: {
         main: [SRC_DIR]
     },
@@ -40,13 +35,6 @@ const config = {
     },
     module: {
         rules: [
-            {
-                test: /(\.jsx|\.js)$/,
-                // 使用happypack
-                use: 'happypack/loader?id=js',
-                include: SRC_DIR,
-                exclude: /node_modules/
-            },
             {
                 test: /\.(png|jpe?g|gif|svg)(\?.*)?$/,
                 loader: 'url-loader',
@@ -115,100 +103,11 @@ fontLoader.forEach((font) => {
 })
 
 if (envDevelopment) {
-    config.module.rules.push({
-        test: /(\.less|\.css)$/,
-        use: [{
-            loader: "style-loader"
-        }, {
-            loader: "css-loader"
-        }, {
-            loader: "less-loader",
-            options: {
-                javascriptEnabled: true
-            }
-        }]
-    })
-    config.entry.main.push(
-        'webpack-hot-middleware/client?path=./__webpack_hmr'
-    )
-    config.plugins.push(
-        new webpack.NoEmitOnErrorsPlugin(),
-        new webpack.HotModuleReplacementPlugin(),
-        new HappyPack({
-            id: 'js',
-            loaders: [
-                'babel-loader?cacheDirectory=true',
-            ]
-        }),
-    )
+    config = merge(config, dev)
 }
 
 if (envProduction) {
-    config.module.rules.push({
-        test: /(\.less|\.css)$/,
-        use: [
-            MiniCssExtractPlugin.loader,
-            {
-                loader: 'css-loader',
-                options: {
-                    importLoaders: 1,
-                    minimize: {
-                        autoprefixer: {
-                            add: true,
-                            remove: true,
-                            browsers: ['last 10 versions'],
-                        },
-                        discardComments: {
-                            removeAll: true,
-                        },
-                        discardUnused: false,
-                        mergeIdents: false,
-                        reduceIdents: false,
-                        safe: true
-                    }
-                }
-            },
-            {
-                loader: 'less-loader',
-                options: {
-                    javascriptEnabled: true
-                }
-            }
-        ]
-    })
-    config.plugins.push(
-        new MiniCssExtractPlugin({
-            filename: "css/main.[chunkhash:5].css",
-            chunkFilename: 'css/main.[contenthash:5].css'
-        }),
-        new CopyWebpackPlugin([{
-            from: path.join(project.basePath, 'dll'),
-            to: path.join(project.basePath, 'dist', 'dll')
-        }]),
-        new HappyPack({
-            id: 'js',
-            loaders: [
-                'babel-loader?cacheDirectory=true',
-            ],
-            threadPool: happyThreadPool,
-            verbose: true
-        }),
-        new UglifyJsPlugin({
-            cache: true,
-            parallel: true,
-            exclude: /node_modules/,
-            sourceMap: project.sourceMap ? true : false,
-            uglifyOptions: {
-                warnings: false,
-                output: {
-                  comments: false,
-                  beautify: false,
-                },
-                ie8: true,
-              }
-        }),
-
-    )
+    config = merge(config, prod)
 }
 
 module.exports = config
