@@ -47,6 +47,12 @@ config.module.rules.push({
             }
         },
         {
+            loader: 'postcss-loader',
+            options: {
+                ident: 'postcss',
+            }
+        },
+        {
             loader: 'less-loader',
             options: {
                 javascriptEnabled: true
